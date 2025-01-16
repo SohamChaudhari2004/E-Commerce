@@ -81,8 +81,87 @@ export const deleteProduct = async(req,res)=>{
 
         await Product.findByIdAndDelete(req.params.id);
 
+        res.json({message:"Product deleted successfully"});
+
     } catch (error) {
         console.error("Error in deleteProduct controller",error.message);
         res.send(500).json({message:error.message}, "server error");
     }
 }
+
+export const getRecommendedProducts= async (req,res)=>{
+    try {
+        // aggregation pipeline from moongoDb
+
+        const products = await Product.aggregate([
+            {
+                $sample:{
+                    size:3
+                },
+                
+            },
+            {
+                $project:{
+                    _id :1,
+                    name:1,
+                    description:1,
+                    image:1,
+                    price:1,
+                }
+            }
+        ]);
+
+        res.json({products})
+        
+    } catch (error) {
+        console.error("Error in getRecommendedProducts controller",error.message);
+        res.send(500).json({message:error.message}, "server error");
+        
+    }
+}
+
+export const getProductsByCategory = async(req,res)=>{
+    
+    const {category} = req.params;
+    try {
+    const products = await Product.find({category});
+    res.json({products});
+
+    } catch (error) {
+        console.error("Error in getProductsByCategory controller",error.message);
+        res.send(500).json({message:error.message}, "server error");
+        
+    }
+}
+
+
+export const toggleFeaturedProduct= async(req,res)=>{ 
+    
+    try {
+        const product = await Product.findById(req.params.id);
+        if(product){
+            product.isFeatured = !product.isFeatured;
+            const updatedProduct = await product.save();
+            await updatedFeaturedProductsCache();
+            res.json(updatedProduct);
+        }
+        else{
+            res.status(404).json({message:"Product not found"});
+        }
+        
+    } catch (error) {
+        console.error("Error in toggleFeaturedProduct controller",error.message);
+        res.send(500).json({message:error.message}, "server error");
+        
+    }
+}
+
+async function updatedFeaturedProductsCache() {
+    try {
+        const featuredProducts = await Product.find({isFeatured:true}).lean();
+        await redis.set("featured_Products",JSON.stringify(featuredProducts));        
+    } catch (error) {
+        console.error("Error in updatedFeaturedProductsCache function",error.message);
+        res.send(500).json({message:error.message}, "server error");       
+    }
+} 
